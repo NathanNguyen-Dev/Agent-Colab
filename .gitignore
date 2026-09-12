@@ -1,0 +1,60 @@
+# Operating system files
+.DS_Store
+._*
+Thumbs.db
+Desktop.ini
+
+# Local editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment variables and local credentials
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+
+# Local agent configuration
+.codex/
+.claude/settings.local.json
+
+# Logs and temporary files
+*.log
+tmp/
+temp/
+.cache/
+
+# JavaScript / TypeScript
+node_modules/
+.npm/
+.pnpm-store/
+.next/
+.nuxt/
+.output/
+.turbo/
+*.tsbuildinfo
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# Build and test output
+dist/
+build/
+coverage/
+.coverage
+.coverage.*
+htmlcov/
+playwright-report/
+test-results/
