@@ -8,10 +8,8 @@ info:
     in the repository for the full architecture and rationale.
 
 servers:
-  - url: https://{deployment}.vercel.app
-    variables:
-      deployment:
-        default: agent-colab
+  - url: https://agent-colab-five.vercel.app
+    description: Stable production alias (deployed behavior may lag this repository).
 
 paths:
   /update:
@@ -65,13 +63,14 @@ paths:
         "409":
           description: >
             update_id reused with different content, or the task is owned by
-            a different agent, or the project's task limit was reached.
+            a different human or agent, a new task duplicates open work, or the
+            project's task limit was reached.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
         "503":
-          description: Storage failure; the write did not complete.
+          description: Storage or upstream failure; delivery may be uncertain. Retry the identical event.
           content:
             application/json:
               schema:
@@ -130,48 +129,65 @@ components:
         - task
         - status
         - summary
+        - blocker
+        - artifact
         - depends_on
         - next
       properties:
         update_id:
           type: string
+          minLength: 1
+          maxLength: 200
           description: Unique ID for this update; used as an idempotency key.
         project_id:
           type: string
           const: agent-colab
         task_id:
           type: string
+          minLength: 1
+          maxLength: 200
           description: Stable ID for the task, used as a dependency reference.
         agent_id:
           type: string
+          minLength: 1
+          maxLength: 200
         person:
           type: string
+          minLength: 1
+          maxLength: 200
           description: The human the agent represents.
         task:
           type: string
+          minLength: 1
+          maxLength: 200
           description: Short task title.
         status:
           $ref: "#/components/schemas/TaskStatus"
         summary:
           type: string
+          minLength: 1
           maxLength: 2000
         blocker:
-          type: string
-          nullable: true
-          description: Required (non-null) when status is "blocked".
+          type: [string, "null"]
+          maxLength: 2000
+          description: Field always required; nonempty and non-null when status is "blocked".
         depends_on:
           type: array
           maxItems: 20
           items:
             type: string
+            minLength: 1
+            maxLength: 200
           description: Task IDs this task depends on. May reference tasks that don't exist yet.
         artifact:
-          type: string
+          type: [string, "null"]
           format: uri
-          nullable: true
+          pattern: "^https?://"
           description: HTTP(S) link to output from this update, if any.
         next:
           type: string
+          minLength: 1
+          maxLength: 2000
           description: The agent's intended next step.
 
     UpdateSnapshot:
@@ -250,7 +266,7 @@ components:
           format: date-time
         tasks:
           type: array
-          description: Latest snapshot per task, up to 50 tasks.
+          description: Latest snapshot per task, including done; at most 50 distinct task IDs across project history.
           items:
             $ref: "#/components/schemas/UpdateSnapshot"
         recent_updates:
@@ -269,3 +285,8 @@ components:
       properties:
         error:
           type: string
+        code:
+          type: string
+          enum: [duplicate_task]
+        existing_task:
+          $ref: "#/components/schemas/UpdateSnapshot"
