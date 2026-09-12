@@ -1,3 +1,4 @@
+import { forwardToHub } from "@/lib/hub-proxy";
 import { NextResponse } from "next/server";
 import { PROJECT_ID, MAX_RECENT_UPDATES, type ProjectStateResponse } from "@/lib/contracts";
 import { readProjectState } from "@/lib/store";
@@ -14,6 +15,9 @@ export async function GET(request: Request) {
       { status: 400, headers: { "Cache-Control": "no-store" } },
     );
   }
+
+  const forwarded = await forwardToHub(request);
+  if (forwarded) return forwarded;
 
   let tasks, recentUpdates;
   try {

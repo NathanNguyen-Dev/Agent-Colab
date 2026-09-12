@@ -5,7 +5,7 @@
 
 import "server-only";
 import type { Client } from "@neondatabase/serverless";
-import { sql, withTransaction } from "./db";
+import { getSql, withTransaction } from "./db";
 import { MAX_TASKS, PROJECT_ID, type UpdateRequest, type UpdateSnapshot } from "./contracts";
 
 export type AppendResult =
@@ -170,13 +170,14 @@ const SNAPSHOT_JSON_OBJECT = `jsonb_build_object(
   'next', next,
   'depends_on', to_jsonb(depends_on),
   'artifact', artifact,
-  'created_at', created_at
+  'timestamp', created_at
 )`;
 
 export async function readProjectState(
   projectId: string,
   recentLimit: number,
 ): Promise<{ tasks: UpdateSnapshot[]; recentUpdates: UpdateSnapshot[] }> {
+  const sql = getSql();
   const rows = await sql`
     WITH latest AS (
       SELECT DISTINCT ON (task_id) *

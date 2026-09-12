@@ -20,7 +20,7 @@ function requireDatabaseUrl(): string {
 }
 
 // One-shot HTTP query helper, for reads that don't need a transaction.
-export const sql = neon(requireDatabaseUrl());
+export function getSql() { return neon(requireDatabaseUrl()); }
 
 // A connected, ready-to-use Client for an interactive transaction. Callers
 // must call `client.end()` (typically in a `finally` block) once done.

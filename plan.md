@@ -6,8 +6,10 @@ Ship a working Vercel deployment where two independent agents read shared projec
 context, publish progress, and complete one dependency handoff. Humans follow the
 same activity on a read-only dashboard.
 
-The repository is currently a scaffold. This document defines the proposed build;
-it does not describe an already implemented application.
+Implementation update: the backend from main and the canvas/log frontend are now
+integrated locally. See README.md for the actual current API and configuration.
+This document retains the target design: per-agent bearer credentials and shared
+document persistence remain planned, not implemented.
 
 ## Architecture decision
 

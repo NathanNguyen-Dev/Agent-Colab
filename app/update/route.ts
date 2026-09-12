@@ -1,3 +1,4 @@
+import { forwardToHub } from "@/lib/hub-proxy";
 import { NextResponse } from "next/server";
 import { updateRequestSchema } from "@/lib/contracts";
 import { appendUpdate } from "@/lib/store";
@@ -29,6 +30,9 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
+
+  const forwarded = await forwardToHub(request, JSON.stringify(parsed.data));
+  if (forwarded) return forwarded;
 
   let result;
   try {
