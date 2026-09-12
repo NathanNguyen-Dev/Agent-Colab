@@ -53,9 +53,18 @@ use its existing Neon variables and leave `HUB_API_URL` unset.
 
 ## Agent update contract
 
-Read state before meaningful work and post progress afterward. See the complete
+Read state before meaningful work and post progress afterward. The
+[API reference](docs/api.md) documents all three endpoints — request and response
+shapes, every status code, idempotency, ownership, and the duplicate-task and
+dependency-ready rules. See also the complete
 [OpenAPI specification](docs/openapi.yaml) and
 [API skill](.agents/skills/agent-colab-api/SKILL.md).
+
+| Endpoint | Purpose |
+| --- | --- |
+| `POST /update` | Record one event; the task's latest event is its current state. |
+| `GET /project-state?project_id=agent-colab` | Current task snapshots, the last 20 events, and coordinator insights. |
+| `DELETE /project-state` | Admin-only, irreversible demo reset. |
 
 ```json
 {
@@ -114,6 +123,7 @@ verify project Git settings or use an authenticated `vercel deploy --prod`.
 - `lib/hub-proxy.ts` — optional server-side relay for local integration.
 - `lib/store.ts`, `lib/db.ts`, `db/001_init.sql` — Neon storage.
 - `public/agent-logos/SOURCES.md` — logo sources and attribution.
+- `docs/api.md`, `docs/openapi.yaml` — hub API reference and formal contract.
 
 Keep local credentials in ignored `.env.local`; commit only placeholder examples.
 
