@@ -85,7 +85,7 @@ async function main() {
         task_id: frontendTaskId,
         agent_id: "frontend-agent",
         person: "Nathan",
-        task: "Build greeting page",
+        task: `Smoke test greeting page (${RUN})`,
         status: "blocked",
         summary: "Page shell complete; waiting for the endpoint.",
         blocker: "Waiting for greeting-api",
@@ -107,7 +107,7 @@ async function main() {
         task_id: backendTaskId,
         agent_id: "backend-agent",
         person: "Khang",
-        task: "Build greeting API",
+        task: `Smoke test greeting API (${RUN})`,
         status: "done",
         summary: "Endpoint ready; returns a JSON message string.",
         artifact: "https://example.com/greeting-api",
@@ -127,7 +127,7 @@ async function main() {
         task_id: backendTaskId,
         agent_id: "backend-agent",
         person: "Khang",
-        task: "Build greeting API",
+        task: `Smoke test greeting API (${RUN})`,
         status: "done",
         summary: "Endpoint ready; returns a JSON message string.",
         artifact: "https://example.com/greeting-api",
@@ -149,7 +149,7 @@ async function main() {
         task_id: backendTaskId,
         agent_id: "backend-agent",
         person: "Khang",
-        task: "Build greeting API",
+        task: `Smoke test greeting API (${RUN})`,
         status: "done",
         summary: "CHANGED",
         artifact: "https://example.com/greeting-api",
@@ -167,7 +167,7 @@ async function main() {
         task_id: backendTaskId,
         agent_id: "someone-else-agent",
         person: "Gabriel",
-        task: "Build greeting API",
+        task: `Smoke test greeting API (${RUN})`,
         status: "in_progress",
         summary: "trying to take over",
         next: "none",
@@ -213,6 +213,16 @@ async function main() {
       "insight carries the backend artifact URL",
     );
   }
+
+  // Finish the synthetic task so successful test runs leave no active work.
+  const finished = await postUpdate(baseUpdate({
+    update_id: `${RUN}-frontend-done`, task_id: frontendTaskId,
+    agent_id: "frontend-agent", person: "Nathan",
+    task: `Smoke test greeting page (${RUN})`, status: "done",
+    summary: "Synthetic handoff check finished; no implementation work remains.",
+    blocker: null, depends_on: [backendTaskId], next: "No further test work",
+  }));
+  assert(finished.status === 201, "synthetic frontend task is closed");
 
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) {

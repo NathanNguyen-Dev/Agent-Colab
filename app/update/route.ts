@@ -46,6 +46,10 @@ export async function POST(request: Request) {
   }
 
   if (result.outcome === "conflict") {
+    if (result.reason === "duplicate_task") return NextResponse.json(
+      { error: "This work is already open. Reuse your existing task_id or coordinate with its owner.", code: "duplicate_task", existing_task: result.existing_task },
+      { status: 409, headers: { "Cache-Control": "no-store" } },
+    );
     const message =
       result.reason === "update_id_reused"
         ? "update_id already used with different content"

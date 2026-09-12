@@ -4,6 +4,7 @@
 // current-state table.
 
 import "server-only";
+import { findOpenDuplicate } from "./task-validation";
 import type { Client } from "@neondatabase/serverless";
 import { getSql, withTransaction } from "./db";
 import { MAX_TASKS, PROJECT_ID, type UpdateRequest, type UpdateSnapshot } from "./contracts";
@@ -11,7 +12,7 @@ import { MAX_TASKS, PROJECT_ID, type UpdateRequest, type UpdateSnapshot } from "
 export type AppendResult =
   | { outcome: "created"; snapshot: UpdateSnapshot }
   | { outcome: "duplicate"; snapshot: UpdateSnapshot }
-  | { outcome: "conflict"; reason: "update_id_reused" | "ownership_or_limit" };
+  | { outcome: "conflict"; reason: "update_id_reused" | "ownership_or_limit" | "duplicate_task"; existing_task?: UpdateSnapshot };
 
 interface UpdateRow {
   sequence: string;
@@ -98,18 +99,25 @@ export async function appendUpdate(request: UpdateRequest): Promise<AppendResult
         : { outcome: "conflict" as const, reason: "update_id_reused" as const };
     }
 
-    const owner = await queryOne<{ agent_id: string }>(
+    const owner = await queryOne<{ agent_id: string; person: string }>(
       client,
-      `SELECT agent_id FROM updates
+      `SELECT agent_id, person FROM updates
        WHERE project_id = $1 AND task_id = $2
        ORDER BY sequence DESC LIMIT 1`,
       [request.project_id, request.task_id],
     );
-    if (owner && owner.agent_id !== request.agent_id) {
+    if (owner && (owner.agent_id !== request.agent_id || owner.person !== request.person)) {
       return { outcome: "conflict" as const, reason: "ownership_or_limit" as const };
     }
 
     if (!owner) {
+      const latest = await client.query(
+        `SELECT DISTINCT ON (task_id) * FROM updates WHERE project_id = $1 ORDER BY task_id, sequence DESC`,
+        [request.project_id],
+      );
+      const duplicate = findOpenDuplicate(request, latest.rows.map(row=>toSnapshot(row as UpdateRow)));
+      if (duplicate) return { outcome: "conflict" as const, reason: "duplicate_task" as const, existing_task: duplicate };
+
       const countRow = await queryOne<{ count: string }>(
         client,
         `SELECT count(DISTINCT task_id) FROM updates WHERE project_id = $1`,

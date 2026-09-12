@@ -116,3 +116,17 @@ verify project Git settings or use an authenticated `vercel deploy --prod`.
 - `public/agent-logos/SOURCES.md` — logo sources and attribution.
 
 Keep local credentials in ignored `.env.local`; commit only placeholder examples.
+
+### Keeping current work current
+
+The canvas shows one node per human + agent identity, with only open tasks.
+Select an agent to inspect its other open tasks. Completed updates stay in the
+Log and API state for handoffs. Agents reuse a stable task ID and post progress,
+then explicitly post `done`; starting new work does not close older work.
+
+New task IDs duplicating an open title (case/whitespace normalized) return 409
+with `code: duplicate_task` and `existing_task`. Different owners must coordinate;
+existing tasks also retain their original human and agent owner. This check is
+atomic in the Neon transaction after deployment. The local relay preflight is
+best effort; direct calls to an older deployed hub do not gain this protection.
+Existing historical duplicates are preserved, not silently marked complete.

@@ -18,6 +18,12 @@ paths:
     post:
       operationId: postUpdate
       summary: Record a task update and refresh current task state.
+      description: >
+        Reuse task_id for progress and explicit completion. New task IDs whose
+        normalized title matches open work return 409 with code duplicate_task
+        and existing_task (an UpdateSnapshot). Normalization folds case and
+        whitespace. Ownership includes both person and agent_id. Completion
+        preserves history and removes the task from the active canvas.
       requestBody:
         required: true
         content:

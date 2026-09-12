@@ -22,7 +22,7 @@ export function normalizeState(input: unknown): ProjectStateResponse {
 export function buildWorkspace(state:ProjectStateResponse|null) {
  const tasks=state?.tasks??[];
  const names=[...new Set(tasks.map(t=>t.person))].sort();
- const rowHeight=Math.max(440,...names.map(name=>400+Math.ceil(tasks.filter(t=>t.person===name).length/2)*130));
+ const rowHeight=Math.max(440,...names.map(name=>400+Math.ceil(new Set(tasks.filter(t=>t.person===name&&t.status!=='done').map(t=>t.agent_id)).size/2)*130));
  const members:Member[]=names.map((name,i)=>({id:name,name,color:['lilac','mint','peach'][i%3],focus:`${tasks.filter(t=>t.person===name&&t.status!=='done').length} open tasks`,initial:{x:300+(i%3)*650,y:285+Math.floor(i/3)*rowHeight}}));
  const fromSnapshot=(s:UpdateSnapshot):AgentNode=>{
   const person=members.find(m=>m.id===s.person);const siblings=tasks.filter(t=>t.person===s.person).sort((a,b)=>a.task_id.localeCompare(b.task_id));const index=Math.max(0,siblings.findIndex(t=>t.task_id===s.task_id));
@@ -30,5 +30,18 @@ export function buildWorkspace(state:ProjectStateResponse|null) {
   const titles:Record<string,string>={chatgpt:'ChatGPT',claude:'Claude',codex:'Codex',cursor:'Cursor',openclaw:'OpenClaw',hermes:'Hermes Agent',grok:'Grok'};
   return {id:s.task_id,updateId:s.update_id,agentId:s.agent_id,person:s.person,name:titles[kind]??s.agent_id,kind,task:s.task,description:s.summary,next:s.next,status:({todo:'Planned',in_progress:'Working',blocked:'Waiting',done:'Done'} as const)[s.status],time:relativeTime(s.timestamp),timestamp:s.timestamp,initial:{x:(person?.initial.x??270)+(index%2===0?155:-155),y:(person?.initial.y??285)+150+Math.floor(index/2)*130},dependsOn:s.depends_on,artifact:s.artifact,blocker:s.blocker};
  };
- return {members,agents:tasks.map(fromSnapshot),activity:(state?.recent_updates??[]).map(fromSnapshot)};
+ const agents=tasks.filter(t=>t.status!=='done').map(fromSnapshot);
+ const groups=new Map<string,AgentNode[]>();
+ for(const a of agents){const key=JSON.stringify([a.person,a.agentId]);groups.set(key,[...(groups.get(key)??[]),a]);}
+ const canvasAgents=[...groups.values()].map(openTasks=>{
+  openTasks.sort((a,b)=>Date.parse(b.timestamp)-Date.parse(a.timestamp));
+  const representative=openTasks[0];
+  const person=members.find(m=>m.id===representative.person)!;
+  const agentIds=[...new Set(agents.filter(a=>a.person===representative.person).map(a=>a.agentId))].sort();
+  const index=agentIds.indexOf(representative.agentId);
+  return {...representative,initial:{x:person.initial.x+(index%2===0?155:-155),y:person.initial.y+150+Math.floor(index/2)*130},openTasks};
+ });
+ // Resolve task dependencies to their owning agent's single visible node.
+ const taskPositions=Object.fromEntries(canvasAgents.flatMap(a=>a.openTasks.map(t=>[t.id,a.id])));
+ return {members,agents,canvasAgents,taskPositions,activity:(state?.recent_updates??[]).map(fromSnapshot)};
 }

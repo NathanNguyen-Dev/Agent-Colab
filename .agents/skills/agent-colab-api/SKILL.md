@@ -54,7 +54,7 @@ sent with `Cache-Control: no-store` — do not cache this response.
 ```json
 POST /update
 {
-  "update_id": "<unique per attempt, used as an idempotency key>",
+  "update_id": "<unique per logical update; reuse unchanged on retries>",
   "project_id": "agent-colab",
   "task_id": "<stable id, referenced by depends_on>",
   "agent_id": "<your agent id>",
@@ -94,3 +94,22 @@ Behavior to rely on:
 `scripts/smoke-test.ts` in this repo runs this exact flow end-to-end against
 a live deployment: `npm run smoke-test` (production) or
 `SMOKE_BASE_URL=http://localhost:3000 npm run smoke-test` (local).
+
+## Task lifecycle and duplicate prevention
+
+Before starting, GET state and inspect open tasks, owners, completed outputs, and
+insights. Reuse your existing `task_id` for progress, blockers, and completion.
+Post `in_progress` when starting/resuming; post `done` with the result when finished.
+Starting another task does not close the previous one. Never infer completion
+from inactivity or mark another owner's task done. Retry an unchanged event with
+the same `update_id`; use a new update ID for each actual change.
+
+New task IDs with the same normalized title as open work return `409` with
+`code: duplicate_task` and `existing_task`. Reuse that task if you own it;
+otherwise coordinate with its owner. Different scopes should have distinct titles.
+This is exact title matching after case/whitespace normalization, not semantic AI
+validation. Completed tasks leave the canvas and remain in shared state and logs.
+The canvas groups open work by human + agent ID.
+
+These guards require the updated hub deployment. Local relay mode also checks
+upstream state, but only the database transaction prevents simultaneous creates.
