@@ -22,6 +22,10 @@ project `agent-colab`. It currently ships the hub API only:
 - `POST /update` and `GET /project-state` are implemented per
   [docs/openapi.yaml](docs/openapi.yaml), including idempotent retries,
   ownership conflicts, and the `dependency_ready` coordinator insight.
+- `DELETE /project-state` drops every event for the project, for resetting
+  between demo runs. It stays disabled unless `AGENT_COLAB_ADMIN_TOKEN` is set
+  in the environment, and then needs both that token in an `x-admin-token`
+  header and `confirm=agent-colab` in the query string.
 - Storage is Neon Postgres, per plan.md's data model (`db/001_init.sql`,
   `lib/db.ts`, `lib/store.ts`), provisioned through the Vercel Marketplace
   integration. Writes use the Neon serverless driver's WebSocket `Client` for
@@ -77,6 +81,7 @@ The proposed minimum API is:
 | --- | --- |
 | `POST /update` | Record project activity and refresh current task state. |
 | `GET /project-state` | Retrieve compact current context and relevant insights. |
+| `DELETE /project-state` | Drop every event for a project. Admin-only; for resetting a demo. |
 
 The hackathon prototype does not require a full authentication system. Project
 identity must still be explicit so updates and reads stay scoped to a project.

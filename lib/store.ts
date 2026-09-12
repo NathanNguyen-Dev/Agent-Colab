@@ -150,6 +150,36 @@ export async function appendUpdate(request: UpdateRequest): Promise<AppendResult
   });
 }
 
+// Deletes every event for a project, returning what was removed. Takes the
+// same per-project advisory lock as appendUpdate, so a concurrent POST /update
+// either lands entirely before the drop or is counted by it — never half of
+// each. The BIGSERIAL sequence is deliberately not reset: sequence stays
+// globally monotonic, so a client holding an old sequence can tell that what
+// it read is gone rather than seeing new events reappear at the same numbers.
+export async function dropProjectEvents(
+  projectId: string,
+): Promise<{ deletedUpdates: number; deletedTasks: number }> {
+  return withTransaction(async (client) => {
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [projectId]);
+
+    const countRow = await queryOne<{ tasks: string }>(
+      client,
+      `SELECT count(DISTINCT task_id) AS tasks FROM updates WHERE project_id = $1`,
+      [projectId],
+    );
+
+    const deleted = await client.query(
+      `DELETE FROM updates WHERE project_id = $1`,
+      [projectId],
+    );
+
+    return {
+      deletedUpdates: deleted.rowCount ?? 0,
+      deletedTasks: Number(countRow?.tasks ?? 0),
+    };
+  });
+}
+
 // Reads the latest per-task snapshots and the most recent updates in a
 // single round trip, so both lists reflect the same point in time (plan.md:
 // "Read tasks and recent events in one SQL statement").
