@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { PROJECT_ID, MAX_RECENT_UPDATES, type ProjectStateResponse } from "@/lib/contracts";
-import { latestTaskSnapshots, recentUpdates } from "@/lib/store";
+import { readProjectState } from "@/lib/store";
 import { computeDependencyReadyInsights } from "@/lib/coordinator";
 
 export const runtime = "nodejs";
@@ -15,12 +15,25 @@ export async function GET(request: Request) {
     );
   }
 
-  const tasks = latestTaskSnapshots();
+  let tasks, recentUpdates;
+  try {
+    ({ tasks, recentUpdates } = await readProjectState(
+      PROJECT_ID,
+      MAX_RECENT_UPDATES,
+    ));
+  } catch (error) {
+    console.error("readProjectState failed", error);
+    return NextResponse.json(
+      { error: "storage failure; could not read project state" },
+      { status: 503, headers: { "Cache-Control": "no-store" } },
+    );
+  }
+
   const body: ProjectStateResponse = {
     project_id: PROJECT_ID,
     generated_at: new Date().toISOString(),
     tasks,
-    recent_updates: recentUpdates(MAX_RECENT_UPDATES),
+    recent_updates: recentUpdates,
     insights: computeDependencyReadyInsights(tasks),
   };
 

@@ -22,9 +22,12 @@ project `agent-colab`. It currently ships the hub API only:
 - `POST /update` and `GET /project-state` are implemented per
   [docs/openapi.yaml](docs/openapi.yaml), including idempotent retries,
   ownership conflicts, and the `dependency_ready` coordinator insight.
-- Storage is a temporary in-process store (`lib/store.ts`) that does not
-  survive a redeploy or cold start. Migrating it to Neon Postgres, per
-  plan.md's data model, is the next step.
+- Storage is Neon Postgres, per plan.md's data model (`db/001_init.sql`,
+  `lib/db.ts`, `lib/store.ts`), provisioned through the Vercel Marketplace
+  integration. Writes use the Neon serverless driver's WebSocket `Client` for
+  the interactive transaction (advisory lock, ownership check, insert); reads
+  use its HTTP tagged-template in a single query so tasks and recent updates
+  reflect the same snapshot.
 - The dashboard (`app/page.tsx`) is a placeholder; the visibility layer
   described below is not built yet.
 
@@ -183,15 +186,19 @@ Clone the repository, enter the project directory, and install dependencies:
 git clone https://github.com/NathanNguyen-Dev/Agent-Colab.git
 cd Agent-Colab
 npm install
+vercel link                    # once, to connect this checkout to the Vercel project
+vercel env pull .env.local     # pulls DATABASE_URL and DATABASE_URL_UNPOOLED from Neon
+npm run db:migrate             # applies db/001_init.sql if not already applied
 npm run dev
 ```
 
 This serves the hub API at `http://localhost:3000` (`POST /update`,
-`GET /project-state?project_id=agent-colab`). See
-[docs/openapi.yaml](docs/openapi.yaml) for the full contract and
-[plan.md](plan.md) for the architecture.
+`GET /project-state?project_id=agent-colab`), backed by the same Neon
+database as the deployment. See [docs/openapi.yaml](docs/openapi.yaml) for
+the full contract and [plan.md](plan.md) for the architecture.
 
-Useful scripts: `npm run build` (production build), `npm run typecheck`.
+Useful scripts: `npm run build` (production build), `npm run typecheck`,
+`npm run db:migrate` (apply `db/001_init.sql`).
 
 ### Deployment
 
@@ -209,7 +216,9 @@ authenticated, linked CLI.
 - `.editorconfig` — shared text formatting defaults.
 - `.gitignore` — excludes local configuration, secrets, dependencies, and build artifacts.
 - `app/` — Next.js App Router: `update/` and `project-state/` route handlers, plus a placeholder root page.
-- `lib/` — shared contracts (`contracts.ts`), coordinator logic (`coordinator.ts`), and the temporary in-process store (`store.ts`).
+- `lib/` — shared contracts (`contracts.ts`), coordinator logic (`coordinator.ts`), the Postgres-backed store (`store.ts`), and the database client (`db.ts`).
+- `db/001_init.sql` — schema; apply with `npm run db:migrate`.
+- `scripts/migrate.ts` — one-off migration runner (not run automatically on build or per-request).
 - `docs/openapi.yaml` — OpenAPI spec for the hub API.
 - `plan.md` — architecture decision and build plan.
 

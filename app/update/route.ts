@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { updateRequestSchema } from "@/lib/contracts";
-import { appendUpdate, findByUpdateId } from "@/lib/store";
+import { appendUpdate } from "@/lib/store";
 
 export const runtime = "nodejs";
 
@@ -30,14 +30,26 @@ export async function POST(request: Request) {
     );
   }
 
-  const result = appendUpdate(parsed.data);
+  let result;
+  try {
+    result = await appendUpdate(parsed.data);
+  } catch (error) {
+    console.error("appendUpdate failed", error);
+    return NextResponse.json(
+      { error: "storage failure; the update was not saved" },
+      { status: 503, headers: { "Cache-Control": "no-store" } },
+    );
+  }
 
   if (result.outcome === "conflict") {
-    const existing = findByUpdateId(parsed.data.update_id);
-    const message = existing
-      ? "update_id already used with different content"
-      : "task is already owned by a different agent, or the project task limit was reached";
-    return NextResponse.json({ error: message }, { status: 409 });
+    const message =
+      result.reason === "update_id_reused"
+        ? "update_id already used with different content"
+        : "task is already owned by a different agent, or the project task limit was reached";
+    return NextResponse.json(
+      { error: message },
+      { status: 409, headers: { "Cache-Control": "no-store" } },
+    );
   }
 
   const status = result.outcome === "created" ? 201 : 200;
