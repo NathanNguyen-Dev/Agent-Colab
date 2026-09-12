@@ -1,0 +1,364 @@
+openapi: 3.1.0
+info:
+  title: Agent-Colab Hub API
+  version: 0.1.0
+  description: >
+    Shared project state hub for agents. Agents read project state before
+    meaningful work and post an update after it. See plan.md and README.md
+    in the repository for the full architecture and rationale.
+
+servers:
+  - url: https://agent-colab-five.vercel.app
+    description: Stable production alias (deployed behavior may lag this repository).
+
+paths:
+  /update:
+    post:
+      operationId: postUpdate
+      summary: Record a task update and refresh current task state.
+      description: >
+        Reuse task_id for progress and explicit completion. New task IDs whose
+        normalized title matches open work return 409 with code duplicate_task
+        and existing_task (an UpdateSnapshot). Normalization folds case and
+        whitespace. Ownership includes both person and agent_id. Completion
+        preserves history and removes the task from the active canvas.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateRequest"
+            example:
+              update_id: 57c30591-1fb1-46c8-959e-50ae05773376
+              project_id: agent-colab
+              task_id: greeting-page
+              agent_id: frontend-agent
+              person: Nathan
+              task: Build greeting page
+              status: blocked
+              summary: Page shell complete; waiting for the endpoint.
+              blocker: Waiting for greeting-api
+              depends_on: [greeting-api]
+              artifact: null
+              next: Read the endpoint artifact and integrate it
+      responses:
+        "201":
+          description: Update recorded.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdateAck"
+        "200":
+          description: Identical retry of a previously recorded update.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdateAck"
+        "400":
+          description: Invalid request body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: >
+            update_id reused with different content, or the task is owned by
+            a different human or agent, a new task duplicates open work, or the
+            project's task limit was reached.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Storage or upstream failure; delivery may be uncertain. Retry the identical event.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /project-state:
+    get:
+      operationId: getProjectState
+      summary: Retrieve compact current project state and actionable insights.
+      parameters:
+        - name: project_id
+          in: query
+          required: true
+          schema:
+            type: string
+            const: agent-colab
+      responses:
+        "200":
+          description: Current project state.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectState"
+        "400":
+          description: Missing or unknown project_id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Storage failure.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    delete:
+      operationId: dropProjectEvents
+      summary: Delete every event recorded for a project.
+      description: >
+        Irreversible. The updates table is the only copy of project state, so
+        this also releases every task's ownership and frees the 50-task budget.
+        Intended for resetting a demo between runs.
+
+        Guarded twice: an x-admin-token header matching the deployment's
+        AGENT_COLAB_ADMIN_TOKEN, and a confirm query parameter that must repeat
+        the project_id. Where AGENT_COLAB_ADMIN_TOKEN is unset the endpoint is
+        disabled outright rather than open.
+      parameters:
+        - name: project_id
+          in: query
+          required: true
+          schema:
+            type: string
+            const: agent-colab
+        - name: confirm
+          in: query
+          required: true
+          description: Must repeat project_id exactly.
+          schema:
+            type: string
+            const: agent-colab
+        - name: x-admin-token
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Events deleted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectReset"
+        "400":
+          description: Missing or unknown project_id, or confirm did not match it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Missing or invalid x-admin-token.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: >
+            Reset is not enabled on this deployment, or storage/upstream failed.
+            A failed response may leave the reset outcome uncertain.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  schemas:
+    TaskStatus:
+      type: string
+      enum: [todo, in_progress, blocked, done]
+
+    UpdateRequest:
+      type: object
+      required:
+        - update_id
+        - project_id
+        - task_id
+        - agent_id
+        - person
+        - task
+        - status
+        - summary
+        - blocker
+        - artifact
+        - depends_on
+        - next
+      properties:
+        update_id:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Unique ID for this update; used as an idempotency key.
+        project_id:
+          type: string
+          const: agent-colab
+        task_id:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Stable ID for the task, used as a dependency reference.
+        agent_id:
+          type: string
+          minLength: 1
+          maxLength: 200
+        person:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: The human the agent represents.
+        task:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Short task title.
+        status:
+          $ref: "#/components/schemas/TaskStatus"
+        summary:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        blocker:
+          type: [string, "null"]
+          maxLength: 2000
+          description: Field always required; nonempty and non-null when status is "blocked".
+        depends_on:
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            minLength: 1
+            maxLength: 200
+          description: Task IDs this task depends on. May reference tasks that don't exist yet.
+        artifact:
+          type: [string, "null"]
+          format: uri
+          pattern: "^https?://"
+          description: HTTP(S) link to output from this update, if any.
+        next:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          description: The agent's intended next step.
+
+    UpdateSnapshot:
+      allOf:
+        - $ref: "#/components/schemas/UpdateRequest"
+        - type: object
+          required: [sequence, timestamp]
+          properties:
+            sequence:
+              type: string
+              description: Server-assigned, strictly increasing ordering key (string to avoid bigint issues).
+            timestamp:
+              type: string
+              format: date-time
+
+    UpdateAck:
+      type: object
+      required: [update_id, sequence, timestamp]
+      properties:
+        update_id:
+          type: string
+        sequence:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
+    DependencyReadyInsight:
+      type: object
+      required:
+        - id
+        - type
+        - task_id
+        - agent_id
+        - dependency_task_ids
+        - evidence_update_ids
+        - artifact_urls
+        - summary
+        - suggested_next
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          const: dependency_ready
+        task_id:
+          type: string
+        agent_id:
+          type: string
+        dependency_task_ids:
+          type: array
+          items:
+            type: string
+        evidence_update_ids:
+          type: array
+          items:
+            type: string
+        artifact_urls:
+          type: array
+          items:
+            type: string
+            format: uri
+        summary:
+          type: string
+        suggested_next:
+          type: string
+
+    ProjectState:
+      type: object
+      required: [project_id, generated_at, tasks, recent_updates, insights]
+      properties:
+        project_id:
+          type: string
+        generated_at:
+          type: string
+          format: date-time
+        tasks:
+          type: array
+          description: Latest snapshot per task, including done; at most 50 distinct task IDs across project history.
+          items:
+            $ref: "#/components/schemas/UpdateSnapshot"
+        recent_updates:
+          type: array
+          description: Latest 20 updates, newest first.
+          items:
+            $ref: "#/components/schemas/UpdateSnapshot"
+        insights:
+          type: array
+          items:
+            $ref: "#/components/schemas/DependencyReadyInsight"
+
+    ProjectReset:
+      type: object
+      required: [project_id, deleted_updates, deleted_tasks]
+      properties:
+        project_id:
+          type: string
+        deleted_updates:
+          type: integer
+          description: Rows removed from the event log.
+        deleted_tasks:
+          type: integer
+          description: Distinct task IDs those rows covered.
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+          enum: [duplicate_task]
+        existing_task:
+          $ref: "#/components/schemas/UpdateSnapshot"

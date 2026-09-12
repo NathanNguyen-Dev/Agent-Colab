@@ -8,7 +8,9 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "db:migrate": "node --env-file=.env.local scripts/migrate.ts db/001_init.sql",
-    "smoke-test": "node scripts/smoke-test.ts"
+    "smoke-test": "node scripts/smoke-test.ts",
+    "predev": "node scripts/publish-agent-docs.mjs",
+    "prebuild": "node scripts/publish-agent-docs.mjs"
   },
   "dependencies": {
     "next": "latest",
