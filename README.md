@@ -13,9 +13,23 @@ visibility layer; the core interaction is agent → shared workspace → agent.
 
 ## Current status
 
-This repository currently contains a minimal, stack-neutral scaffold. The API,
-storage, agent integrations, coordinator, and dashboard described below are
-planned work, not implemented features. The technology stack is not yet selected.
+The technology stack is selected and the backend is deployed. See
+[plan.md](plan.md) for the full architecture decision.
+
+This is a Next.js (App Router, TypeScript) application deployed to Vercel as
+project `agent-colab`. It currently ships the hub API only:
+
+- `POST /update` and `GET /project-state` are implemented per
+  [docs/openapi.yaml](docs/openapi.yaml), including idempotent retries,
+  ownership conflicts, and the `dependency_ready` coordinator insight.
+- Storage is a temporary in-process store (`lib/store.ts`) that does not
+  survive a redeploy or cold start. Migrating it to Neon Postgres, per
+  plan.md's data model, is the next step.
+- The dashboard (`app/page.tsx`) is a placeholder; the visibility layer
+  described below is not built yet.
+
+Agent integrations and the coordinator's semantic-overlap features are
+planned work, not implemented.
 
 ## Core workflow
 
@@ -163,20 +177,41 @@ reading project updates should continue to work.
 
 ## Getting started
 
-Clone the repository and enter the project directory:
+Clone the repository, enter the project directory, and install dependencies:
 
 ```sh
 git clone https://github.com/NathanNguyen-Dev/Agent-Colab.git
 cd Agent-Colab
+npm install
+npm run dev
 ```
 
-There is no runnable application yet. Add installation, development, testing,
-and deployment instructions when the technology stack is selected.
+This serves the hub API at `http://localhost:3000` (`POST /update`,
+`GET /project-state?project_id=agent-colab`). See
+[docs/openapi.yaml](docs/openapi.yaml) for the full contract and
+[plan.md](plan.md) for the architecture.
+
+Useful scripts: `npm run build` (production build), `npm run typecheck`.
+
+### Deployment
+
+The Vercel project `agent-colab` (scope `khangtoh-7074s-projects`) is linked
+via `vercel link`. Automatic deploy-on-push from GitHub is not yet connected —
+`vercel git connect` failed because this Vercel account doesn't have access to
+the `NathanNguyen-Dev/Agent-Colab` GitHub repo. Connect it from the project's
+Git settings in the Vercel dashboard (or grant repo access to the Vercel
+GitHub App) to enable that. Until then, deploy manually with `vercel deploy`
+(preview) or `vercel deploy --prod` (production) from a machine with an
+authenticated, linked CLI.
 
 ## Repository files
 
 - `.editorconfig` — shared text formatting defaults.
 - `.gitignore` — excludes local configuration, secrets, dependencies, and build artifacts.
+- `app/` — Next.js App Router: `update/` and `project-state/` route handlers, plus a placeholder root page.
+- `lib/` — shared contracts (`contracts.ts`), coordinator logic (`coordinator.ts`), and the temporary in-process store (`store.ts`).
+- `docs/openapi.yaml` — OpenAPI spec for the hub API.
+- `plan.md` — architecture decision and build plan.
 
 ## Local configuration
 
