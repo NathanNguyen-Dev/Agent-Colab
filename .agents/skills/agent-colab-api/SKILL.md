@@ -25,7 +25,14 @@ the spec is authoritative.
 
 ## Base URL
 
-Production: `https://agent-colab-five.vercel.app`
+Production (stable alias, use this): `https://agent-colab-five.vercel.app`
+
+Production deployment URL (unique per deploy, e.g.
+`https://agent-colab-6f84fr57x-khangtoh-7074s-projects.vercel.app`): this
+changes on every deploy and, unlike the alias above, is gated by Vercel
+Deployment Protection — a plain request 302s to `vercel.com/sso-api` instead
+of returning JSON. Do not use a per-deployment URL for agent calls; always
+use the stable alias.
 
 Local dev: `http://localhost:3000` (after `npm run dev`; see README's
 "Getting started").
