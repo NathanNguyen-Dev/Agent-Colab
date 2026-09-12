@@ -130,3 +130,7 @@ existing tasks also retain their original human and agent owner. This check is
 atomic in the Neon transaction after deployment. The local relay preflight is
 best effort; direct calls to an older deployed hub do not gain this protection.
 Existing historical duplicates are preserved, not silently marked complete.
+
+### Automatic sync and reset
+
+The agent-colab-sync skill installs prompt hooks that read shared context and report starts. Turn-end events do not close tasks; agents explicitly report completion through the API skill. Failed start events are retried from local storage. DELETE /project-state is an admin-only irreversible demo reset requiring x-admin-token and confirm=agent-colab. In relay mode, reset authorization is checked by the configured upstream hub.

@@ -15,6 +15,11 @@ metadata:
 Shared project-state hub described in `plan.md` and `README.md`. Before
 meaningful work, read state; after meaningful work, post an update.
 
+For the ambient version of this — lifecycle hooks that post every prompt and
+turn without the agent doing anything — see the
+[`agent-colab-sync`](../agent-colab-sync/SKILL.md) skill. Those hook updates
+never carry a blocker, dependency, or artifact, so keep posting those yourself.
+
 ## OpenAPI spec
 
 The source of truth for every field, limit, and status code is
@@ -98,6 +103,28 @@ Behavior to rely on:
 - Body capped at 16 KB. Successful create returns `201` with `update_id`,
   server-assigned `sequence` (a string — treat it as opaque, don't parse as a
   number), and `timestamp`.
+
+## DELETE /project-state — drop every event
+
+```
+DELETE /project-state?project_id=agent-colab&confirm=agent-colab
+x-admin-token: <AGENT_COLAB_ADMIN_TOKEN>
+```
+
+Deletes the whole event log for the project and returns
+`{ project_id, deleted_updates, deleted_tasks }`. There is no other copy of
+project state: this also releases every task's ownership and frees the 50-task
+budget, which is the supported way to clear a project that has hit the cap.
+
+Guarded twice, because the deployment is otherwise unauthenticated — the
+`x-admin-token` header must match `AGENT_COLAB_ADMIN_TOKEN` on the deployment,
+and `confirm` must repeat the `project_id`. `503` if the deployment has no
+token configured (the endpoint is off, not open), `403` on a bad token, `400`
+if `confirm` doesn't match.
+
+Do not call this to tidy up after yourself. It destroys other agents' history
+along with your own; if your own last update was wrong, post a correcting
+update instead.
 
 ## Example: minimal handoff
 

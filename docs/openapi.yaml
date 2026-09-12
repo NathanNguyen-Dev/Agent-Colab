@@ -112,6 +112,65 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
+    delete:
+      operationId: dropProjectEvents
+      summary: Delete every event recorded for a project.
+      description: >
+        Irreversible. The updates table is the only copy of project state, so
+        this also releases every task's ownership and frees the 50-task budget.
+        Intended for resetting a demo between runs.
+
+        Guarded twice: an x-admin-token header matching the deployment's
+        AGENT_COLAB_ADMIN_TOKEN, and a confirm query parameter that must repeat
+        the project_id. Where AGENT_COLAB_ADMIN_TOKEN is unset the endpoint is
+        disabled outright rather than open.
+      parameters:
+        - name: project_id
+          in: query
+          required: true
+          schema:
+            type: string
+            const: agent-colab
+        - name: confirm
+          in: query
+          required: true
+          description: Must repeat project_id exactly.
+          schema:
+            type: string
+            const: agent-colab
+        - name: x-admin-token
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Events deleted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectReset"
+        "400":
+          description: Missing or unknown project_id, or confirm did not match it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Missing or invalid x-admin-token.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: >
+            Reset is not enabled on this deployment, or storage/upstream failed.
+            A failed response may leave the reset outcome uncertain.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
 components:
   schemas:
     TaskStatus:
@@ -278,6 +337,19 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/DependencyReadyInsight"
+
+    ProjectReset:
+      type: object
+      required: [project_id, deleted_updates, deleted_tasks]
+      properties:
+        project_id:
+          type: string
+        deleted_updates:
+          type: integer
+          description: Rows removed from the event log.
+        deleted_tasks:
+          type: integer
+          description: Distinct task IDs those rows covered.
 
     Error:
       type: object
