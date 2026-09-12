@@ -2,7 +2,30 @@
   "name": "agent-in-the-loop",
   "version": "0.1.0",
   "private": true,
-  "scripts": { "dev": "next dev", "build": "next build", "start": "next start", "typecheck": "tsc --noEmit" },
-  "dependencies": { "next": "latest", "react": "latest", "react-dom": "latest", "lucide-react": "latest" },
-  "devDependencies": { "typescript": "latest", "@types/node": "latest", "@types/react": "latest", "@types/react-dom": "latest" }
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "db:migrate": "node --env-file=.env.local scripts/migrate.ts db/001_init.sql",
+    "smoke-test": "node scripts/smoke-test.ts"
+  },
+  "dependencies": {
+    "next": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "lucide-react": "latest",
+    "@neondatabase/serverless": "^1.1.0",
+    "server-only": "^0.0.1",
+    "ws": "^8.21.3",
+    "zod": "3.24.1"
+  },
+  "devDependencies": {
+    "typescript": "latest",
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "@types/ws": "^8.18.1"
+  },
+  "type": "module"
 }

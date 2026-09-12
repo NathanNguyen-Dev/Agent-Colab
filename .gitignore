@@ -58,3 +58,5 @@ coverage/
 htmlcov/
 playwright-report/
 test-results/
+.vercel
+.env*
