@@ -1,4 +1,4 @@
-# Agent-Colab
+# Agent in the loop
 
 Shared project context for humans collaborating through their own AI agents.
 
@@ -7,15 +7,20 @@ working on the same project, but each agent mostly knows what its own human is
 doing. That leads to duplicated work, missed dependencies, poor handoffs, and
 constant manual status updates.
 
-Agent-Colab gives those agents a shared understanding of the project: a live
+Agent in the loop gives those agents a shared understanding of the project: a live
 stand-up for a team of humans and their personal AI agents. The website is a
 visibility layer; the core interaction is agent → shared workspace → agent.
 
 ## Current status
 
-This repository currently contains a minimal, stack-neutral scaffold. The API,
-storage, agent integrations, coordinator, and dashboard described below are
-planned work, not implemented features. The technology stack is not yet selected.
+This repository includes a runnable frontend prototype with a pannable, zoomable
+team canvas, draggable human avatars and agent nodes, and an activity log with
+Now/Done filters. A Share Context tab contains editable Plan.md and Context.md
+drafts with browser-local saves, copy, and Markdown downloads. These are sample
+documents, not synced repository files. All activity is sample data. The API,
+storage, agent integrations, and coordinator described below remain planned work. The MVP plan uses Next.js on Vercel with
+Neon Postgres provisioned through Vercel Marketplace. See [the build plan](plan.md).
+The repository name and internal project ID remain `Agent-Colab` and `agent-colab`.
 
 ## Core workflow
 
@@ -27,7 +32,7 @@ Before meaningful work, an agent reads the shared project state to learn:
 
 After meaningful work, the agent posts an update containing:
 
-- The human it represents and its agent identity.
+- A connection credential from which the server resolves its human and agent identity.
 - The task, status, and a summary of what changed.
 - Any blocker and dependencies.
 - Outputs or artifacts and its next intended step.
@@ -61,8 +66,34 @@ The proposed minimum API is:
 | `POST /update` | Record project activity and refresh current task state. |
 | `GET /project-state` | Retrieve compact current context and relevant insights. |
 
-The hackathon prototype does not require a full authentication system. Project
-identity must still be explicit so updates and reads stay scoped to a project.
+The MVP authenticates writes with one bearer token per registered agent connection.
+It does not require user accounts or a login flow. The read-only dashboard and
+project-state endpoint expose synthetic demo state publicly for this sprint.
+
+### Whose agent sent the update?
+
+Pre-register each connection with a stable human ID, display name, agent ID,
+agent name, environment label, and project ID. Nathan's ChatGPT and Nathan's Codex
+receive different credentials associated with the same human ID.
+
+```http
+POST /update
+Authorization: Bearer <agent-token>
+Content-Type: application/json
+```
+
+The server resolves the token to the registered identity and stamps the stored
+update. Request bodies contain task progress, not caller-selected identity.
+Missing, invalid, or revoked credentials return `401`; attempts to change another
+connection's task return `403`.
+
+Generate a random token for each connection, store only its hash in Neon, and
+configure the raw token in that agent's tool or connector secret settings. Keep
+credentials out of shared instructions, prompts, logs, and browser code. Tokens
+can be replaced without changing the stable agent identity or task ownership.
+
+The token identifies a registered connection; “ChatGPT” is its configured
+environment label, not independent proof of which provider or model executed.
 
 ### Shared storage
 
@@ -73,15 +104,13 @@ ownership, dependencies, blockers, next steps, and insights. Preserve longer
 prompts and outputs separately with references for retrieval when needed; do not
 send the entire transcript history on every read.
 
-The following is an illustrative update, pending agreement on the API contract:
+The following is an illustrative authenticated request body. The server adds
+project, human, and agent identity from the connection record:
 
 ```json
 {
   "update_id": "update-nathan-001",
-  "project_id": "agent-colab",
   "task_id": "frontend-auth",
-  "agent_id": "nathan-agent",
-  "person": "Nathan",
   "task": "Build frontend authentication",
   "status": "blocked",
   "summary": "Login UI complete. Waiting to connect the auth API.",
@@ -117,7 +146,8 @@ initial scope.
 
 ### Read-only dashboard
 
-Show team activity, current tasks, blockers, dependencies, artifacts, and
+Group tasks by human and then registered agent, with environment labels and
+last-update timestamps. Show current tasks, blockers, dependencies, artifacts, and
 coordinator insights. A human should be able to follow progress and understand a
 handoff without reading raw agent transcripts.
 
@@ -126,8 +156,8 @@ handoff without reading raw agent transcripts.
 | Stage | Work | Completion criteria |
 | --- | --- | --- |
 | 1. Shared contract | Agree on fields, statuses, dependency references, and API examples. | All workstreams use the same request and response shapes. |
-| 2. Hub | Build the API, validation, persistent history, and current-state view. | Updates survive restarts and produce accurate state. |
-| 3. Agent integration | Write common instructions and connect the demo environments. | Two real agents independently read and update the hub. |
+| 2. Hub | Build the API, credential lookup, validation, persistent history, and current-state view. | Updates survive restarts and carry server-resolved identity. |
+| 3. Agent integration | Register connections, configure separate credentials, and write common instructions. | Two real agents independently read and update the hub under their registered identities. |
 | 4. Coordination | Add dependency checks and AI-assisted overlap and assistance insights. | Insights reference supporting updates and suggest useful actions. |
 | 5. Visibility | Build the read-only dashboard. | Humans can follow activity, blockers, and handoffs. |
 | 6. Demo validation | Rehearse the complete flow and check failure handling. | The scenario works repeatedly with real agent calls. |
@@ -157,7 +187,7 @@ reading project updates should continue to work.
 ### Outside the initial scope
 
 - Team chat and dashboard task editing.
-- Complex permissions and production authentication.
+- User accounts, login flows, and complex permissions; per-agent write tokens are in scope.
 - Autonomous task reassignment or automatic agent wakeups.
 - Full transcript ingestion as a requirement for participation.
 
@@ -170,8 +200,21 @@ git clone https://github.com/NathanNguyen-Dev/Agent-Colab.git
 cd Agent-Colab
 ```
 
-There is no runnable application yet. Add installation, development, testing,
-and deployment instructions when the technology stack is selected.
+Run the frontend prototype:
+
+```sh
+npm install
+npm run dev
+```
+
+Open [the local preview](http://localhost:3000). Drag the canvas to pan and drag people or agents to rearrange them. Use the zoom
+buttons or Control/Command plus scroll to zoom; ordinary scroll pans. Click a
+node to inspect its reported focus or task. Switch to Log to search current and
+completed work. Arrow keys pan a focused canvas and +/− zoom it. Fit and reset
+controls restore the overview. All content is sample data held in the browser;
+refreshing resets positions and filters. No backend or credentials
+are needed. Run `npm run build` for a production build and `npm run typecheck`
+for TypeScript validation.
 
 ## Repository files
 

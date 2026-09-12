@@ -1,4 +1,4 @@
-# Agent-Colab: three-hour MVP architecture and build plan
+# Agent in the loop: three-hour MVP architecture and build plan
 
 ## Outcome
 
@@ -48,15 +48,46 @@ Implementation rules:
 - Return `Cache-Control: no-store` for project state and fetch it without caching.
 - Keep database credentials server-side; never prefix them with `NEXT_PUBLIC_`.
 - Use one configured project, `agent-colab`, and reject other project IDs.
-- No accounts or authentication flow for the prototype. Use synthetic demo content.
+- Authenticate writes with per-agent bearer tokens. No user accounts or login UI.
+- Keep dashboard and project-state reads public for synthetic demo content only.
+  Read access control is deferred; write tokens do not make project state private.
+
+## Agent identity and credentials
+
+Pre-register each agent connection before the demo. Nathan's ChatGPT and Nathan's
+Codex have separate `agent_id` values and tokens, both associated with the same
+stable `person_id`. The product name is Agent in the loop; keep `agent-colab` as
+the internal project ID and retain the current repository name.
+
+The hub owner provides a local registration script that creates a connection and
+generates a cryptographically random 32-byte bearer token. Store only its SHA-256
+hash in Neon. Deliver the raw token once to the connection owner and configure it
+in their tool/connector secret settings or a local ignored environment variable.
+Never commit tokens or put them in shared instructions, prompts, logs, or browser
+bundles. There is no registration endpoint or registration UI in this sprint.
+
+For each write, resolve the bearer token to an active connection and derive
+`project_id`, `person_id`, `person`, `agent_id`, `agent_name`, and `environment`.
+Reject caller-supplied identity fields with `400`; never trust a body claiming to
+be Nathan. Missing, invalid, or revoked tokens return `401`. A valid connection
+cannot edit another agent's task, even when both belong to the same human (`403`).
+
+Allow rotation by replacing the token hash on the same connection record and
+revocation by setting `revoked_at`. Neither operation changes agent identity or
+task ownership. Check credentials on every write, including retries, before
+returning saved results. Never include credential hashes in API responses.
+
+The environment label is assigned during registration. Token possession proves
+the registered connection was used; it does not independently attest to ChatGPT,
+Codex, or a particular model running. Task prose remains agent-reported content.
 
 ## Ownership
 
 | Workstream | Owner | Deliverable |
 | --- | --- | --- |
 | Agent instructions | You, confirmed | Reusable instructions for read-before-work and update-after-work, with examples |
-| Hub and deployment | Team member to confirm | Database, API, dependency coordinator, Vercel deployment |
-| Dashboard and integration | Team member to confirm | Dashboard, callable agent connections, end-to-end demo |
+| Hub and deployment | Team member to confirm | Database, registration script, credential checks, API, coordinator, deployment |
+| Dashboard and integration | Team member to confirm | Dashboard, agent tool credentials, callable connections, end-to-end demo |
 
 These are three concurrent workstreams. The instructions owner defines agent
 behavior; the integration owner ensures each selected environment can actually
@@ -69,13 +100,17 @@ names such as `title` and `next_step`. Every update is a complete task snapshot.
 
 ### POST /update
 
+```http
+Authorization: Bearer <agent-token>
+Content-Type: application/json
+```
+
+Send task data only. The server attaches identity from the registered connection:
+
 ```json
 {
   "update_id": "57c30591-1fb1-46c8-959e-50ae05773376",
-  "project_id": "agent-colab",
   "task_id": "greeting-page",
-  "agent_id": "frontend-agent",
-  "person": "Nathan",
   "task": "Build greeting page",
   "status": "blocked",
   "summary": "Page shell complete; waiting for the endpoint.",
@@ -87,7 +122,7 @@ names such as `title` and `next_step`. Every update is a complete task snapshot.
 ```
 
 - Status: `todo`, `in_progress`, `blocked`, or `done`.
-- Require identity, task, status, summary, dependency list, and next-step fields.
+- Require update ID, task ID, task, status, summary, dependency list, and next-step fields.
   Allow `blocker` and `artifact` to be null; require a blocker for blocked tasks.
 - Accept dependency IDs before their tasks exist; unresolved IDs remain pending.
   Reject self-dependencies. Detecting larger cycles is deferred.
@@ -95,12 +130,15 @@ names such as `title` and `next_step`. Every update is a complete task snapshot.
 - Bound request size to 16 KB, summaries to 2,000 characters, and dependencies to 20.
 - Assign ordering and timestamp on the server. Agents send updates sequentially.
 - Treat `(project_id, update_id)` as an idempotency key. An identical retry returns
-  the saved result; reuse with different content returns `409`.
-- One agent owns each task for the demo. Reject ownership changes with `409`.
+  the saved result only for its authenticated agent; reuse with different content
+  returns `409`. Reuse by a different connection returns `403`.
+- One registered agent owns each task for the demo. Reject ownership changes with `403`.
 
 Successful creation returns `201` with `update_id`, server `sequence`, and
 `timestamp`. An identical retry returns `200` with those original values.
 Invalid requests return `400`; storage failures return `503` with a short error.
+Credential failures return `401`; attempts to write another agent's task or reuse
+its update ID return `403`. Resolve authorization before exposing stored results.
 Only acknowledge success after the database write completes.
 
 ### GET /project-state?project_id=agent-colab
@@ -120,7 +158,10 @@ The recent list is newest first (this example has one recent event).
       "project_id": "agent-colab",
       "task_id": "run-001-greeting-page",
       "agent_id": "frontend-agent",
+      "person_id": "nathan",
       "person": "Nathan",
+      "agent_name": "Nathan’s ChatGPT",
+      "environment": "ChatGPT",
       "task": "Build greeting page",
       "status": "blocked",
       "summary": "Page shell complete; waiting for the endpoint.",
@@ -136,7 +177,10 @@ The recent list is newest first (this example has one recent event).
       "project_id": "agent-colab",
       "task_id": "run-001-greeting-api",
       "agent_id": "backend-agent",
+      "person_id": "khang",
       "person": "Khang",
+      "agent_name": "Khang’s Codex",
+      "environment": "Codex",
       "task": "Build greeting API",
       "status": "done",
       "summary": "Endpoint ready; returns a JSON message string.",
@@ -154,7 +198,10 @@ The recent list is newest first (this example has one recent event).
       "project_id": "agent-colab",
       "task_id": "run-001-greeting-api",
       "agent_id": "backend-agent",
+      "person_id": "khang",
       "person": "Khang",
+      "agent_name": "Khang’s Codex",
+      "environment": "Codex",
       "task": "Build greeting API",
       "status": "done",
       "summary": "Endpoint ready; returns a JSON message string.",
@@ -194,13 +241,27 @@ Artifact URLs above are placeholders; replace them with reachable demo artifacts
 
 ## Data model
 
-One `updates` table is sufficient:
+Use two tables: `agent_connections` for credential lookup and `updates` for history.
+
+`agent_connections`:
+
+| Column | Purpose |
+| --- | --- |
+| `agent_id` | Primary key; stable across token rotation |
+| `project_id` | Workspace membership, fixed to `agent-colab` in this sprint |
+| `person_id`, `person` | Stable human ID and display name |
+| `agent_name`, `environment` | Display name such as Nathan's ChatGPT, and configured environment |
+| `token_hash` | Unique SHA-256 hash of the random token, never the raw credential |
+| `created_at`, `revoked_at` | Registration time and optional revocation time |
+
+`updates`:
 
 | Column | Purpose |
 | --- | --- |
 | `sequence` | Database-generated increasing identifier |
 | `project_id`, `update_id` | Composite unique key for retries |
-| `task_id`, `agent_id`, `person` | Task and owner identity |
+| `task_id`, `agent_id` | Task ID and registered connection reference |
+| `person_id`, `person`, `agent_name`, `environment` | Server-stamped identity snapshot from registration |
 | `task`, `status`, `summary`, `blocker`, `next` | Current snapshot content |
 | `depends_on` | Array of prerequisite task IDs |
 | `artifact` | Nullable HTTP(S) URL |
@@ -262,6 +323,7 @@ components/
 lib/
   contracts.ts                 # Shared validation and response types
   db.ts                        # Server-only database client
+  agent-auth.ts                # Bearer token hash lookup and identity resolution
   project-state.ts             # Latest snapshots and recent history
   coordinator.ts               # Pure dependency checks
 db/
@@ -269,11 +331,13 @@ db/
 docs/
   agent-instructions.md        # Owned by you
 scripts/
+  register-agent.ts            # Local registration/rotation; no public signup route
   smoke-test.ts                # API handoff and retry checks
 .env.example
 ```
 
-Dashboard: one page with tasks grouped by person, status badges, blockers,
+Dashboard: one page grouped by `person_id`, then `agent_id`, displaying human name,
+agent name, environment, last-update time, status badges, blockers,
 artifacts, recent activity, and actionable insights. Show loading, empty, and
 failure states. Keep the last successful data visible with a stale indicator
 when polling fails. Render agent text as text, not raw HTML.
@@ -282,8 +346,8 @@ when polling fails. Render agent text as text, not raw HTML.
 
 | Time | Hub and deployment | Agent instructions — you | Dashboard and integration |
 | --- | --- | --- | --- |
-| 0–15 min | Scaffold app; freeze contract with team; provision database | Review examples and agree on agent behavior | Confirm two usable agent environments; start against shared fixture |
-| 15–45 min | Apply schema; build both routes; deploy to Vercel | Write read/start/progress/blocked/done instructions | Build task list and activity feed; make first real agent API call |
+| 0–15 min | Scaffold app; freeze identity/API contract; provision database | Review examples; keep instructions independent of credentials | Confirm two callable environments and secret settings; start shared fixture |
+| 15–45 min | Apply schema; register connections; build routes with write authentication; deploy | Write read/start/progress/blocked/done instructions using configured tools | Configure separate connection tokens; build activity feed; make authenticated call |
 | 45–90 min | Add validation, retries, ownership checks, dependency insights | Test instructions against deployed API | Connect dashboard and second agent; show insight and artifact links |
 | 90–135 min | Fix integration and persistence issues | Run the real handoff and refine ambiguous instructions | Complete the handoff; add loading/error states |
 | 135–160 min | Run critical checks; stretch feature only if everything passes | Freeze instructions and rehearse | Polish demo readability; prepare repeatable demo tasks |
@@ -310,7 +374,10 @@ not extending the feature list.
    signed-in browser: agent calls must receive JSON rather than a Vercel login
    page. Configure deployment protection appropriately for the demo endpoint.
 6. Give agents the stable production base URL. Verify dashboard polling, a real
-   write, and a fresh read. Redeploy and confirm the saved update remains.
+   authenticated write, and a fresh read. Register each connection against the
+   production database and configure its token outside shared instructions.
+   Redeploy and confirm the saved update and connection remain. Never regenerate
+   tokens automatically on deployment.
 7. Subsequent pushes to the configured production branch deliver the integrated
    application. Check deployment success before rehearsing against the new build.
 
@@ -323,6 +390,13 @@ Required checks:
 - Identical retry creates only one event; conflicting retry returns `409`.
 - Two agents updating separate tasks preserve both updates.
 - Wrong project and task-owner changes are rejected.
+- Missing, invalid, and revoked write tokens return `401` without writes.
+- A registered Nathan/ChatGPT token produces Nathan's server-stamped identity;
+  caller-supplied identity fields are rejected and cannot impersonate another user.
+- Nathan's second agent groups under the same human but cannot edit his first
+  agent's task. Different agents cannot replay each other's update IDs (`403`).
+- Token rotation preserves task ownership, permits retries by the same agent,
+  and invalidates the old token. Public reads never expose tokens or hashes.
 - Missing or unfinished prerequisite produces no ready insight.
 - All prerequisites done produces an insight with the correct evidence/artifact.
 - Resumed task or reopened prerequisite removes the stale insight.
