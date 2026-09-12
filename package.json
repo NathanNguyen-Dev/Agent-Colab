@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "db:migrate": "node --env-file=.env.local scripts/migrate.ts db/001_init.sql"
+    "db:migrate": "node --env-file=.env.local scripts/migrate.ts db/001_init.sql",
+    "smoke-test": "node scripts/smoke-test.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

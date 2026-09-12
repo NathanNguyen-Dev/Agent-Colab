@@ -200,6 +200,22 @@ the full contract and [plan.md](plan.md) for the architecture.
 Useful scripts: `npm run build` (production build), `npm run typecheck`,
 `npm run db:migrate` (apply `db/001_init.sql`).
 
+### Smoke testing the API
+
+`npm run smoke-test` exercises a real deployment end-to-end against the
+contract in [docs/openapi.yaml](docs/openapi.yaml): validation failures, the
+idempotent retry and both `409` conflict paths, and the `dependency_ready`
+insight. Run it after every deploy to confirm the API didn't break.
+
+```sh
+npm run smoke-test                                       # against production
+SMOKE_BASE_URL=http://localhost:3000 npm run smoke-test  # against local dev
+```
+
+Each run uses a fresh timestamped task/update-id prefix, so repeated runs
+never collide and production history never needs resetting. The script exits
+non-zero if any check fails.
+
 ### Deployment
 
 The Vercel project `agent-colab` (scope `khangtoh-7074s-projects`) is linked
@@ -219,6 +235,7 @@ authenticated, linked CLI.
 - `lib/` — shared contracts (`contracts.ts`), coordinator logic (`coordinator.ts`), the Postgres-backed store (`store.ts`), and the database client (`db.ts`).
 - `db/001_init.sql` — schema; apply with `npm run db:migrate`.
 - `scripts/migrate.ts` — one-off migration runner (not run automatically on build or per-request).
+- `scripts/smoke-test.ts` — end-to-end API checks against a deployment; `npm run smoke-test`.
 - `docs/openapi.yaml` — OpenAPI spec for the hub API.
 - `plan.md` — architecture decision and build plan.
 
